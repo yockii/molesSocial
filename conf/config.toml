@@ -1,0 +1,25 @@
+dev=true
+
+[server]
+port = 9980
+viewsDir = "views"
+
+[database]
+driver = "pg"
+host = "localhost"
+user = "postgres"
+password = "postgres"
+db = "molesocial"
+port = 5432
+prefix = "t_"
+showSql = true
+
+[logger]
+level = "trace"
+
+[redis]
+host = "localhost"
+port = 6379
+password = ""
+db = 0
+app = "moleSocial"
