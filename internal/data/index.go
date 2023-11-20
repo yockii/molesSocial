@@ -4,6 +4,7 @@ import (
 	"github.com/yockii/molesSocial/internal/constant"
 	"github.com/yockii/molesSocial/internal/model"
 	model2 "github.com/yockii/molesSocial/internal/model/account"
+	modelU "github.com/yockii/molesSocial/internal/model/user"
 	"github.com/yockii/molesSocial/internal/service"
 	"github.com/yockii/qscore/pkg/config"
 )
@@ -36,13 +37,13 @@ func InitDevData() {
 	// 初始化admin用户
 	account := &model2.Account{
 		Username:    "admin",
-		Domain:      site.Domain,
+		SiteID:      site.ID,
 		Note:        "管理员",
 		DisplayName: "测试管理员",
 	}
 	service.AccountService.Add(account)
 
-	user := &model.User{
+	user := &modelU.User{
 		Email:     "xuyuqi@gmail.com",
 		SiteID:    site.ID,
 		Admin:     &constant.BoolTrue,

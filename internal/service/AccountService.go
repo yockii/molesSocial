@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	logger "github.com/sirupsen/logrus"
 	"github.com/yockii/molesSocial/internal/constant"
 	"github.com/yockii/molesSocial/internal/model/account"
@@ -28,8 +29,17 @@ func (*accountService) Model() *model.Account {
 }
 
 func (s *accountService) GetByUsernameAndDomain(username string, domain string) (*model.Account, error) {
+	site, err := SiteService.GetByDomain(domain)
+	if err != nil {
+		logger.Errorln(err)
+		return nil, err
+	}
+	if site == nil {
+		return nil, errors.New("site not found")
+	}
+
 	instance := new(model.Account)
-	err := database.DB.Where(&model.Account{Username: username, Domain: domain}).First(instance).Error
+	err = database.DB.Where(&model.Account{Username: username, SiteID: site.ID}).First(instance).Error
 	if err != nil {
 		logger.Errorln(err)
 		return nil, err

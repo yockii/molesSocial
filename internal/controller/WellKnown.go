@@ -66,8 +66,16 @@ func (c *WebFingerController) WebFinger(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("resource is invalid")
 	}
 
+	site, err := service.SiteService.GetByDomain(host)
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString("site info error")
+	}
+	if site == nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString("site is invalid")
+	}
+
 	return ctx.JSON(&domain.WellKnownResponse{
-		Subject: constant.WebFingerAccountPrefix + ":" + account.Username + "@" + account.Domain,
+		Subject: constant.WebFingerAccountPrefix + ":" + account.Username + "@" + site.Domain,
 		Aliases: []string{
 			account.Uri,
 			account.Url,

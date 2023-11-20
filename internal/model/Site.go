@@ -13,7 +13,7 @@ type Site struct {
 	Description        string `json:"description" gorm:"size:500;comment:站点描述"`
 	ShortDesc          string `json:"shortDesc" gorm:"size:100;comment:站点简介"`
 	Thumbnail          string `json:"thumbnail" gorm:"size:100;comment:站点缩略图"`
-	Email              string `json:"email" gorm:"size:100;comment:站点邮箱"`
+	ManagerID          uint64 `json:"managerId" gorm:"index;comment:管理员ID"`
 	Languages          string `json:"languages" gorm:"size:100;comment:站点语言"`
 	Registrations      *bool  `json:"registrations" gorm:"comment:是否开放注册"`
 	ApprovalRequired   *bool  `json:"approvalRequired" gorm:"comment:是否需要审核"`
@@ -48,7 +48,7 @@ func (s *Site) UpdateModel() database.Model {
 		Description:        s.Description,
 		ShortDesc:          s.ShortDesc,
 		Thumbnail:          s.Thumbnail,
-		Email:              s.Email,
+		ManagerID:          s.ManagerID,
 		Languages:          s.Languages,
 		Registrations:      s.ApprovalRequired,
 		ApprovalRequired:   s.ApprovalRequired,

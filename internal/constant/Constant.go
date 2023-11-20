@@ -9,3 +9,10 @@ var (
 	BoolTrue  = true
 	BoolFalse = false
 )
+
+const (
+	JwtSecret         = "moles_social"
+	JwtClaimManagerId = "uid"
+	JwtClaimSessionId = "sid"
+	JwtClaimTenantId  = "tid"
+)

@@ -6,7 +6,9 @@ import (
 	"github.com/tidwall/sjson"
 	"github.com/yockii/molesSocial/internal/constant"
 	"github.com/yockii/molesSocial/internal/domain"
+	model "github.com/yockii/molesSocial/internal/model/manage"
 	"github.com/yockii/molesSocial/internal/service"
+	"github.com/yockii/qscore/pkg/common"
 	"github.com/yockii/qscore/pkg/server"
 	"strings"
 )
@@ -76,11 +78,21 @@ func (c *nodeController) NodeInstance(ctx *fiber.Ctx) error {
 	if site == nil {
 		return ctx.Status(fiber.StatusNotFound).SendString("site node not found")
 	}
+
+	var siteManager *model.Manager
+	siteManager, err = service.ManagerService.Instance(&model.Manager{BaseModel: common.BaseModel{ID: site.ManagerID}})
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString("site manager data process error")
+	}
+	if siteManager == nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString("site manager not found")
+	}
+
 	instance := &domain.InstanceInfo{
 		URI:         host,
 		Title:       site.Name,
 		Description: site.Description,
-		Email:       site.Email,
+		Email:       siteManager.Email,
 		Version:     constant.Version,
 		Urls: map[string]string{
 			"streaming_api": "wss://" + host + "/api/v1/streaming",
