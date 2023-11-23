@@ -5,7 +5,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/yockii/molesSocial/internal/constant"
 	"github.com/yockii/molesSocial/internal/domain"
-	"github.com/yockii/molesSocial/internal/model/account"
+	"github.com/yockii/molesSocial/internal/model"
+	modelA "github.com/yockii/molesSocial/internal/model/account"
 	modelU "github.com/yockii/molesSocial/internal/model/user"
 	"github.com/yockii/molesSocial/internal/service"
 	"github.com/yockii/qscore/pkg/cache"
@@ -22,10 +23,20 @@ func (c *authController) SignIn(ctx *fiber.Ctx) (err error) {
 		return ctx.Status(fiber.StatusBadRequest).SendString(err.Error())
 	}
 	host := ctx.Hostname()
+
+	var site *model.Site
+	site, err = service.SiteService.GetByDomain(host)
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+	if site == nil {
+		return ctx.Status(fiber.StatusNotFound).SendString("site not found")
+	}
+
 	var user *modelU.User
 	if sir.Username != "" {
-		var account *model.Account
-		account, err = service.AccountService.GetByUsernameAndDomain(sir.Username, host)
+		var account *modelA.Account
+		account, err = service.AccountService.GetByUsernameAndSite(sir.Username, site.ID)
 		if err != nil {
 			return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
 		}
@@ -73,14 +84,9 @@ func (c *authController) SignInPage(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
 
-	layout := ""
-	if site.LayoutTemplateName != "" {
-		layout = site.Domain + "/" + site.LayoutTemplateName
-	}
-
-	return ctx.Render(site.Domain+"/sign_in", fiber.Map{
+	return ctx.Render("sign_in", fiber.Map{
 		"site": site,
-	}, layout)
+	}, "layouts/main")
 }
 
 func init() {

@@ -15,12 +15,19 @@ type OauthApplication struct {
 	CreatedAt    int64  `json:"createdAt" gorm:"autoCreateTime:milli"`
 	UpdatedAt    int64  `json:"updatedAt" gorm:"autoUpdateTime:milli"`
 	Website      string `json:"website" gorm:"size:100;comment:网站"`
-	ClientID     string `json:"client_id" gorm:"size:100;comment:客户端ID"`
+	ClientID     string `json:"client_id" gorm:"index;size:100;comment:客户端ID"`
 	ClientSecret string `json:"client_secret" gorm:"size:100;comment:客户端密钥"`
 }
 
 func (*OauthApplication) TableComment() string {
 	return `应用表`
+}
+
+func (m *OauthApplication) InstanceRequired() string {
+	if m.ID == 0 && m.ClientID == "" {
+		return "id, client_id"
+	}
+	return ""
 }
 
 func (o *OauthApplication) AddRequired() string {

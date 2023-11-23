@@ -27,9 +27,9 @@ func (*accountService) Model() *model.Account {
 	return new(model.Account)
 }
 
-func (s *accountService) GetByUsernameAndDomain(username string, domain string) (*model.Account, error) {
+func (s *accountService) GetByUsernameAndSite(username string, siteID uint64) (*model.Account, error) {
 	instance := new(model.Account)
-	err := database.DB.Where(&model.Account{Username: username, Domain: domain}).First(instance).Error
+	err := database.DB.Where(&model.Account{Username: username, SiteID: siteID}).First(instance).Error
 	if err != nil {
 		logger.Errorln(err)
 		return nil, err

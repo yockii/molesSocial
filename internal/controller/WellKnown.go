@@ -5,6 +5,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/yockii/molesSocial/internal/constant"
 	"github.com/yockii/molesSocial/internal/domain"
+	"github.com/yockii/molesSocial/internal/model"
 	"github.com/yockii/molesSocial/internal/service"
 	"github.com/yockii/qscore/pkg/server"
 	"net/url"
@@ -60,14 +61,23 @@ func (c *WebFingerController) WebFinger(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusBadRequest).SendString("resource is invalid")
 	}
 
+	var site *model.Site
+	site, err = service.SiteService.GetByDomain(host)
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString("resource is invalid")
+	}
+	if site == nil {
+		return ctx.Status(fiber.StatusNotFound).SendString("site is invalid")
+	}
+
 	// 根据username和host获取用户信息
-	account, err := service.AccountService.GetByUsernameAndDomain(username, host)
+	account, err := service.AccountService.GetByUsernameAndSite(username, site.ID)
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).SendString("resource is invalid")
 	}
 
 	return ctx.JSON(&domain.WellKnownResponse{
-		Subject: constant.WebFingerAccountPrefix + ":" + account.Username + "@" + account.Domain,
+		Subject: constant.WebFingerAccountPrefix + ":" + account.Username + "@" + site.Domain,
 		Aliases: []string{
 			account.Uri,
 			account.Url,

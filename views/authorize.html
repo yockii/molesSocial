@@ -1,0 +1,116 @@
+{{- /*
+// MolesSocial
+// Copyright (C) MolesSocial Authors admin@moles.social
+// Note: this page is used to login to the site
+// Available variables:
+// .account - the account signed in
+//      .ID - the id of the account
+//      .Username - the username of the account
+// .site - the site configuration
+//      .Domain - the domain of the site
+//      .Name - the name of the site
+//      .Description - the description of the site
+// .app - the app configuration
+//      .ClientID - the client id
+//      .Name - the name of the app
+//      .Website - the website of the app
+// .redirectUri - the redirect uri
+// .scopes - the scopes array
+*/ -}}
+
+{{template "partials/header" .}}
+<main style="display: flex; flex-direction: column; align-items: center;">
+    {{ $hasRead := false }}
+    {{ $hasWrite := false }}
+    {{ $hasFollow := false }}
+    {{ $hasPush := false }}
+    {{ range $scope := .scopes }}
+        {{if eq $scope "read"}}
+        {{ $hasRead = true }}
+        {{end}}
+        {{if eq $scope "write"}}
+        {{ $hasWrite = true }}
+        {{end}}
+        {{if eq $scope "follow"}}
+        {{ $hasFollow = true }}
+        {{end}}
+        {{if eq $scope "push"}}
+        {{ $hasPush = true }}
+        {{end}}
+    {{end}}
+
+    <!-- 顶部 signed in as -->
+    <section style="width: 600px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: #FFFFFF19; border-radius: 10px;">
+            <div style="display: flex; align-items: center;">
+                <img src="{{.account.AvatarRemoteUrl}}" style="width: 50px; height: 50px; border-radius: 50%;">
+                <div style="margin-left: 10px;">
+                    <h3 style="margin: 0;">{{.account.Username}}</h3>
+                    <p style="margin: 0;">Signed in as {{.account.Username}}@{{.site.Domain}}</p>
+                </div>
+            </div>
+            <a href="/logout" style="text-decoration: none; color: #FFFFFF;">Sign out</a>
+        </div>
+    </section>
+    <section style="width: 600px; margin-top: 20px;">
+        <h2 style="margin: 20px 0;">Authorization required</h2>
+        <p>
+            <strong>{{.app.Name}}</strong> is requesting permission to access your account.
+            <br>
+            It is a third-party app. <strong>If you do not trust it, then you should not authorize it.</strong>
+        </p>
+    </section>
+    <!-- 应用信息 -->
+    <section style="width: 600px; margin-top: 20px;">
+        <form action="/oauth/authorize" method="post">
+       <h2 style="margin: 20px 0;">Review permissions</h2>
+        <!-- 权限列表 -->
+        <!-- 逐个判断 read, write, follow, push -->
+        <!-- read和write如果都有，则显示Full access to your account -->
+        <div style="background-color: #FFFFFF19; border-radius: 10px;">
+            <div style="padding: 5px 15px; display: flex">
+                <div style="width: 9px; height: 18px; border-right: 5px solid #00FFFF; border-bottom: 5px solid #00FFFF; transform: rotate(40deg); margin:auto 5px;"></div>
+                <div style="margin-left: 30px; padding: 10px;">
+                {{if and $hasRead $hasWrite}}
+                    <div style="font-size: 1.2em;">Full access to your account</div>
+                    <div style="color: #CCCCCC;">Read and write access</div>
+                {{else if $hasRead}}
+                    <div style="font-size: 1.2em;">Read access to your account</div>
+                    <div style="color: #CCCCCC;">Read access</div>
+                {{else if $hasWrite}}
+                    <div style="font-size: 1.2em;">Write access to your account</div>
+                    <div style="color: #CCCCCC;">Write access</div>
+                {{end}}
+                </div>
+            </div>
+            {{if $hasFollow}}
+            <div style="padding: 5px 15px; display: flex; border-top: 1px solid #000000;">
+                <div style="width: 9px; height: 18px; border-right: 5px solid #00FFFF; border-bottom: 5px solid #00FFFF; transform: rotate(40deg); margin:auto 5px;"></div>
+                <div style="margin-left: 30px; padding: 10px;">
+                    <div style="font-size: 1.2em;">Follow， Mutes and Blocks</div>
+                    <div style="color: #CCCCCC;">Read and write access</div>
+                </div>
+            </div>
+            {{end}}
+            {{if $hasPush}}
+            <div style="padding: 5px 15px; display: flex; border-top: 1px solid #000000;">
+                <div style="width: 9px; height: 18px; border-right: 5px solid #00FFFF; border-bottom: 5px solid #00FFFF; transform: rotate(40deg); margin:auto 5px;"></div>
+                <div style="margin-left: 30px; padding: 10px;">
+                    <div style="font-size: 1.2em;">Push notifications</div>
+                    <div style="color: #CCCCCC;">Read and write access</div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+        <!-- authorize及deny按钮 -->
+        <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <input type="hidden" name="appId" value="{{.app.ID}}">
+            <input type="hidden" name="state" value="{{.state}}">
+            <button type="submit" name="authorize" value="1" style="padding: 10px 20px; border-radius: 5px; border: none; background-color: #00FFFF; font-size: 1.2em; flex: 6;cursor: pointer">Authorize</button>
+            <span style="flex:1;"></span>
+            <button type="submit" name="authorize" value="0" style="padding: 10px 20px; border-radius: 5px; border: none; background-color: #FF5555; font-size: 1.2em; flex: 4;cursor: pointer">Deny</button>
+        </div>
+        </form>
+    </section>
+</main>
+{{template "partials/footer" .}}

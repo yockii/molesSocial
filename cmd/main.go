@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html/v2"
 	logger "github.com/sirupsen/logrus"
 	"github.com/yockii/molesSocial/internal/constant"
 	"github.com/yockii/molesSocial/internal/controller"
@@ -42,6 +44,13 @@ func main() {
 	defer task.Stop()
 
 	server.InitServer()
+	if config.GetBool("dev") {
+		engine := (server.DefaultWebApp.ViewEngine).(*html.Engine)
+		server.Get("/reload", func(c *fiber.Ctx) error {
+			engine.Reload(true)
+			return c.SendString("ok")
+		})
+	}
 
 	// 初始化路由
 	controller.InitRouter() // 自行编码，仅为了引用出controller包，也可尝试直接导入 _ "github.com/xxx/xxx/controller"
