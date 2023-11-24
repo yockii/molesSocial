@@ -27,8 +27,8 @@ func (*oauthApplicationService) Model() *model.OauthApplication {
 }
 
 func (s *oauthApplicationService) Save(d *model.OauthApplication) (*model.OauthApplication, error) {
-	if d.Name == "" || d.Website == "" || d.RedirectUri == "" {
-		return nil, errors.New("client_name, website, redirect_uris are required")
+	if d.Name == "" || d.RedirectUri == "" {
+		return nil, errors.New("client_name, redirect_uris are required")
 	}
 
 	// 查重？  不查重，直接生成，虽然可能会有很多记录

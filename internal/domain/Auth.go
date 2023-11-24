@@ -10,5 +10,4 @@ type SignUpRequest struct {
 type SignInRequest struct {
 	Username string `json:"username" form:"username"`
 	Password string `json:"password" form:"password"`
-	Email    string `json:"email" form:"email"`
 }

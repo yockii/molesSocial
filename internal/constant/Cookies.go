@@ -1,6 +1,6 @@
 package constant
 
 const (
-	CookiesNameOauthAuthorizeCode = "molesocial_oauth_authorize_code"
-	CookiesNameToken              = "molesocial_token"
+	CookiesNameOauthAuthorizeCode = "molesSocial_oauth_authorize_code"
+	CookiesNameToken              = "molesSocial_token"
 )

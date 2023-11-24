@@ -5,7 +5,8 @@ const (
 	RedisPrefixOauthAuthorizeInfo = RedisPrefix + ":oauth:authorize:"
 	RedisPrefixUserToken          = RedisPrefix + ":user:token:"
 	RedisPrefixAccessCode         = RedisPrefix + ":access:code:"
-	RedisPrefixAccessToken        = RedisPrefix + ":access:token:"
+	RedisPrefixAccessTokenAccount = RedisPrefix + "accessToken:account:"
+	RedisPrefixAccessTokenApp     = RedisPrefix + "accessToken:app:"
 )
 
 const (

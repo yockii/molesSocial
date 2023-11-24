@@ -22,84 +22,53 @@ import (
 
 type oauthController struct{}
 
-// Authorize  http://localhost:9980/oauth/authorize
-// 有可能是其他客户端定位过来
-// ?client_id=claujf0udbsi782n19d0
-// &redirect_uri=https%3A%2F%2Fpinafore.social%2Fsettings%2Finstances%2Fadd
-// &response_type=code
-// &scope=read%20write%20follow%20push
-// 有可能是登录后定位过来
-func (c *oauthController) Authorize(ctx *fiber.Ctx) (err error) {
-	// 从cookies中取出molesocial_oauth_authorize_code信息
-	var authorizeRequest *domain.OauthAuthorizeRequest
-	var arCached bool
-	code := ctx.Cookies(constant.CookiesNameOauthAuthorizeCode)
-	token := ctx.Cookies(constant.CookiesNameToken)
-	if code != "" {
-		// 有code，从redis中取出并删除OauthAuthorizeRequest信息
-		authorizeRequest, err = c.popOauthAuthorizeRequest(code)
-		// cookies中删除
-		ctx.Cookie(&fiber.Cookie{
-			Name:     constant.CookiesNameOauthAuthorizeCode,
-			Value:    "",
-			Path:     "/",
-			Expires:  time.Now(),
-			HTTPOnly: true,
-			Secure:   true,
+func init() {
+	c := new(oauthController)
+	Controllers = append(Controllers, c)
+}
+
+func (c *oauthController) InitRoute() {
+	r := server.Group("/oauth")
+	r.Get("/authorize", c.GetAuthorize)   // 授权页面
+	r.Post("/authorize", c.PostAuthorize) // 授权请求
+
+	r.Post("/token", c.Token) // 获得访问令牌
+	r.Post("/revoke", c.RevokeToken)
+}
+
+func (c *oauthController) GetAuthorize(ctx *fiber.Ctx) error {
+	ar := new(domain.OauthAuthorizeRequest)
+	if err := ctx.QueryParser(ar); err != nil {
+		return ctx.Status(fiber.StatusBadRequest).SendString(err.Error())
+	}
+	if ar.ResponseType == "" || ar.ClientID == "" || ar.RedirectURI == "" {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(&domain.Response{
+			Error:            "invalid_request",
+			ErrorDescription: "response_type, client_id, redirect_uri are required",
 		})
-		if err != nil {
-			return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
-		}
+	}
+	if ar.ResponseType != "code" {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(&domain.Response{
+			Error:            "unsupported_response_type",
+			ErrorDescription: "response_type must be code",
+		})
 	}
 
-	if authorizeRequest == nil {
-		authorizeRequest = new(domain.OauthAuthorizeRequest)
-		if err = ctx.QueryParser(authorizeRequest); err != nil {
-			return ctx.Status(fiber.StatusBadRequest).SendString(err.Error())
-		}
-		if authorizeRequest.ResponseType == "" || authorizeRequest.ClientID == "" || authorizeRequest.RedirectURI == "" {
-			return ctx.Status(fiber.StatusBadRequest).SendString("invalid request")
-		}
-		// 判断response_type是否为code
-		if authorizeRequest.ResponseType != "code" {
-			return ctx.Status(fiber.StatusBadRequest).SendString("invalid response_type")
-		}
-
-		if token == "" {
-			// 则为新进入，需要存储信息并跳转
-			// 信息放redis中，并设置过期时间，生成唯一的code作为cookies传出，然后重定向到登录页面
-			code, err = c.cacheAuthorizeRequest(ctx, authorizeRequest)
-			if err != nil {
-				return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
-			}
-			arCached = true
-			return ctx.Redirect("/auth/sign_in")
-		}
-	}
-
-	// 验证token是否有效
-	cachedUser, err := c.verifyToken(token)
+	// 获取对应app
+	app, err := service.OauthApplicationService.Instance(&modelO.OauthApplication{ClientID: ar.ClientID})
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
-	if cachedUser == nil {
-		if !arCached {
-			code, err = c.cacheAuthorizeRequest(ctx, authorizeRequest)
-			if err != nil {
-				return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
-			}
-		}
-		return ctx.Redirect("/auth/sign_in")
+	if app == nil {
+		return ctx.Status(fiber.StatusNotFound).SendString("app not found")
 	}
 
-	// 获取对应账号
-	var account *modelA.Account
-	account, err = service.AccountService.Instance(&modelA.Account{BaseModel: common.BaseModel{ID: cachedUser.AccountID}})
-	if err != nil {
-		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
-	}
-	if account == nil {
-		return ctx.Status(fiber.StatusNotFound).SendString("account not found")
+	// 判断redirect_uri是否一致
+	if ar.RedirectURI != app.RedirectUri {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(&domain.Response{
+			Error:            "invalid_request",
+			ErrorDescription: "redirect_uri is not match",
+		})
 	}
 
 	// 获取对应站点信息
@@ -108,22 +77,55 @@ func (c *oauthController) Authorize(ctx *fiber.Ctx) (err error) {
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
+	if site == nil {
+		return ctx.Status(fiber.StatusNotFound).SendString("site not found")
+	}
 
-	// 获取app
-	var app *modelO.OauthApplication
-	app, err = service.OauthApplicationService.Instance(&modelO.OauthApplication{ClientID: authorizeRequest.ClientID})
+	// 判断是否已经登录
+	token := ctx.Cookies(constant.CookiesNameToken)
+	if !ar.ForceLogin && token != "" {
+		// 验证token是否有效
+		cachedUser, err := c.verifyToken(token)
+		if err != nil {
+			return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+		}
+		if cachedUser != nil {
+			// 获取对应账号
+			var account *modelA.Account
+			account, err = service.AccountService.Instance(&modelA.Account{BaseModel: common.BaseModel{ID: cachedUser.AccountID}})
+			if err != nil {
+				return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+			}
+			if account == nil {
+				return ctx.Status(fiber.StatusNotFound).SendString("account not found")
+			}
+
+			// 进入授权页面
+			return ctx.Render("authorize", fiber.Map{
+				"account": account,
+				"site":    site,
+				"app":     app,
+				"state":   ar.State,
+				"scopes":  strings.Split(ar.Scope, " "),
+			}, "layouts/main")
+		}
+	}
+
+	// 未登录，跳转到登录页面
+	// 信息放redis中，并设置过期时间，生成唯一的code作为cookies传出，然后重定向到登录页面
+	code, err := c.cacheOauthAuthorizeRequest(ar)
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
-
-	// 展示授权页面
-	return ctx.Render("authorize", fiber.Map{
-		"account": account,
-		"site":    site,
-		"app":     app,
-		"state":   authorizeRequest.State,
-		"scopes":  strings.Split(authorizeRequest.Scope, " "),
-	}, "layouts/main")
+	ctx.Cookie(&fiber.Cookie{
+		Name:     constant.CookiesNameOauthAuthorizeCode,
+		Value:    code,
+		Path:     "/",
+		Expires:  time.Now().Add(5 * time.Minute),
+		HTTPOnly: true,
+		Secure:   true,
+	})
+	return ctx.Redirect("/auth/sign_in")
 }
 
 func (c *oauthController) cacheAuthorizeRequest(ctx *fiber.Ctx, authorizeRequest *domain.OauthAuthorizeRequest) (code string, err error) {
@@ -142,21 +144,6 @@ func (c *oauthController) cacheAuthorizeRequest(ctx *fiber.Ctx, authorizeRequest
 	return
 }
 
-func (c *oauthController) popOauthAuthorizeRequest(code string) (*domain.OauthAuthorizeRequest, error) {
-	conn := cache.Get()
-	defer conn.Close()
-	oarJson, err := redis.Bytes(conn.Do("GET", constant.RedisPrefixOauthAuthorizeInfo+code))
-	if err != nil {
-		return nil, err
-	}
-	req := new(domain.OauthAuthorizeRequest)
-	if err = json.Unmarshal(oarJson, req); err != nil {
-		return nil, err
-	}
-	_, err = conn.Do("DEL", constant.RedisPrefixOauthAuthorizeInfo+code)
-	return req, nil
-}
-
 func (c *oauthController) cacheOauthAuthorizeRequest(req *domain.OauthAuthorizeRequest) (string, error) {
 	conn := cache.Get()
 	defer conn.Close()
@@ -170,19 +157,6 @@ func (c *oauthController) cacheOauthAuthorizeRequest(req *domain.OauthAuthorizeR
 		return "", err
 	}
 	return code, nil
-}
-
-func init() {
-	c := new(oauthController)
-	Controllers = append(Controllers, c)
-}
-
-func (c *oauthController) InitRoute() {
-	r := server.Group("/oauth")
-	r.Get("/authorize", c.Authorize)
-	r.Post("/authorize", c.PostAuthorize)
-
-	r.Post("/token", c.Token)
 }
 
 func (c *oauthController) verifyToken(token string) (*modelU.User, error) {
@@ -203,14 +177,22 @@ func (c *oauthController) verifyToken(token string) (*modelU.User, error) {
 }
 
 // Token  http://localhost:9980/oauth/token
-// request： client_id=nVPq20OCKrW8vw297NWMl22iz5qKiD9J4yvWMw_EHSk&client_secret=uALhB7JT7Ocfj3YA2lsr1ICZGYC67B9jqJbmVhg-arU&redirect_uri=https%3A%2F%2Fpinafore.social%2Fsettings%2Finstances%2Fadd&grant_type=authorization_code&code=ZQ7ByYqb8J1rC6dCOrCH
+// request： client_id=nVPq20OCKrW8vw297NWMl22iz5qKiD9J4yvWMw_EHSk
 //
-//	response: {
-//	   "access_token": "JxzJThdnrriruOjSU2HjCrBWmJzSaHEAH3HTL7rVJgA",
-//	   "token_type": "Bearer",
-//	   "scope": "read write follow push",
-//	   "created_at": 1700532528
-//	}
+//	         &client_secret=uALhB7JT7Ocfj3YA2lsr1ICZGYC67B9jqJbmVhg-arU
+//	         &redirect_uri=https%3A%2F%2Fpinafore.social%2Fsettings%2Finstances%2Fadd - 可以是url作为重定向，如果是urn:ietf:wg:oauth:2.0:oob，则显示token；这里必须与注册app时保持一致
+//	         &grant_type=authorization_code - 必须是authorization_code来根据code获取token，或者也可以是client_credentials获取程序级别的token
+//	         &code=ZQ7ByYqb8J1rC6dCOrCH - 仅当grant_type为authorization_code时有效
+//
+//		response: {
+//		   "access_token": "JxzJThdnrriruOjSU2HjCrBWmJzSaHEAH3HTL7rVJgA",
+//		   "token_type": "Bearer",
+//		   "scope": "read write follow push",
+//		   "created_at": 1700532528
+//		}
+//
+// 400 client error
+// 401 unauthorized
 func (c *oauthController) Token(ctx *fiber.Ctx) error {
 	req := new(domain.OauthTokenRequest)
 	if err := ctx.BodyParser(req); err != nil {
@@ -260,9 +242,28 @@ func (c *oauthController) Token(ctx *fiber.Ctx) error {
 
 	// 生成accessToken，缓存账号ID
 	accessToken := util.GenerateXid()
-	_, err = conn.Do("SETEX", constant.RedisPrefixUserToken+accessToken, 60*60*24*7, account.ID)
+	_, err = conn.Do("SETEX", constant.RedisPrefixAccessTokenAccount+accessToken, 60*60*24*7, account.ID)
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+	// 缓存accessToken对应的appID
+	_, err = conn.Do("SETEX", constant.RedisPrefixAccessTokenApp+accessToken, 60*60*24*7, app.ID)
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	// 删除cookies中的CookiesNameOauthAuthorizeCode及对应缓存
+	code := ctx.Cookies(constant.CookiesNameOauthAuthorizeCode)
+	if code != "" {
+		ctx.Cookie(&fiber.Cookie{
+			Name:     constant.CookiesNameOauthAuthorizeCode,
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Now().Add(-1 * time.Minute),
+			HTTPOnly: true,
+			Secure:   true,
+		})
+		_, _ = conn.Do("DEL", constant.RedisPrefixOauthAuthorizeInfo+code)
 	}
 
 	return ctx.JSON(&domain.OauthTokenResponse{
@@ -295,7 +296,7 @@ func (c *oauthController) PostAuthorize(ctx *fiber.Ctx) error {
 	}
 
 	if !accepted {
-		return ctx.Redirect(app.RedirectUri + "?error=access_denied&state=" + state)
+		return ctx.Redirect(app.RedirectUri + "?error=access_denied&error_description=The+user+has+cancelled+entering+self-asserted+information&state=" + state)
 	}
 
 	// 验证token是否有效
@@ -324,4 +325,45 @@ func (c *oauthController) generateCode(user *modelU.User) (string, error) {
 		return "", err
 	}
 	return code, nil
+}
+
+// RevokeToken - 撤销访问令牌 client_id, client_secret, token | 200 ok, 403 forbidden
+func (c *oauthController) RevokeToken(ctx *fiber.Ctx) error {
+	ortr := new(domain.OauthRevokeTokenRequest)
+	if err := ctx.BodyParser(ortr); err != nil {
+		return ctx.Status(fiber.StatusBadRequest).SendString(err.Error())
+	}
+	if ortr.ClientID == "" || ortr.ClientSecret == "" || ortr.Token == "" {
+		return ctx.Status(fiber.StatusBadRequest).SendString("invalid request")
+	}
+
+	// 检查clientID和clientSecret是否匹配
+	app, err := service.OauthApplicationService.Instance(&modelO.OauthApplication{ClientID: ortr.ClientID})
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+	if app == nil {
+		return ctx.Status(fiber.StatusNotFound).SendString("app not found")
+	}
+	if app.ClientSecret != ortr.ClientSecret {
+		return ctx.Status(fiber.StatusForbidden).SendString("invalid client_secret")
+	}
+
+	// 检查token是否有效
+	conn := cache.Get()
+	defer conn.Close()
+	_, err = redis.Uint64(conn.Do("GET", constant.RedisPrefixAccessTokenAccount+ortr.Token))
+	if err != nil && !errors.Is(err, redis.ErrNil) {
+		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+	_, err = redis.Uint64(conn.Do("GET", constant.RedisPrefixAccessTokenApp+ortr.Token))
+	if err != nil && !errors.Is(err, redis.ErrNil) {
+		return ctx.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	// 删除token
+	_, _ = conn.Do("DEL", constant.RedisPrefixAccessTokenAccount+ortr.Token)
+	_, _ = conn.Do("DEL", constant.RedisPrefixAccessTokenApp+ortr.Token)
+
+	return ctx.JSON(&fiber.Map{})
 }
